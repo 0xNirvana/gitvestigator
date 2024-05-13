@@ -177,6 +177,9 @@ func Usage() {
 }
 
 func AddUser(user *UserIdentifiers, usersList *UsersList) {
+	if user.username == "GitHub" && user.emailAddress == "noreply@github.com" {
+		return
+	}
 	userPresent := false
 	for i, userInList := range *usersList {
 		if userInList.username == user.username && userInList.emailAddress == user.emailAddress {
