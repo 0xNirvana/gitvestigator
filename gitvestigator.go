@@ -15,6 +15,7 @@ import (
 
 type Args struct {
 	repoLink string
+	token    string
 }
 
 type RepoData struct {
@@ -171,8 +172,15 @@ type UserIdentifiers struct {
 
 type UsersList []UserIdentifiers
 
+func responseHeaderPrinter(resp *http.Response) {
+	fmt.Println("Response Header:")
+	for key, value := range resp.Header {
+		fmt.Printf("%s: %s\n", key, strings.Join(value, ", "))
+	}
+}
+
 func Usage() {
-	fmt.Println("Usage: gitvestigator -repo https://github.com/username/repo.git")
+	fmt.Println("Usage: gitvestigator -repo https://github.com/username/repo.git -t <GitHub_Personal_Token>")
 	os.Exit(1)
 }
 
@@ -209,22 +217,42 @@ func AddUser(user *UserIdentifiers, usersList *UsersList) {
 			return (*usersList)[i].username < (*usersList)[j].username
 		})
 	}
-
-	// PrintUsers(usersList)
 }
 
 func ParseArgs(args *Args) *Args {
 	flag.StringVar(&args.repoLink, "repo", "", "The link to the repository")
+	flag.StringVar(&args.token, "t", "", "GitHub Personal Access Token")
 	flag.Parse()
 	if len(os.Args) < 2 {
 		flag.Usage = Usage
 		flag.Usage()
+	}
+	if args.token == "" {
+		fmt.Println("NO TOKEN WAS PROVIDED")
+		fmt.Println("Number of requests will be limited to 60 per hour")
 	}
 	return args
 }
 
 func generateApiUrl(args *Args, repoData *RepoData) {
 	repoData.URL = strings.Replace(args.repoLink, "https://github.com", "https://api.github.com/repos", -1)
+}
+
+func sendRequest(url string, args *Args) *http.Response {
+	// fmt.Println("Sending request to URL: ", url)
+	client := &http.Client{}
+	req, _ := http.NewRequest("GET", url, nil)
+	req.Header.Set("Authorization", "token "+args.token)
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Println("Error occured while sending request to URL: ", url)
+		fmt.Println("Error: ", err)
+		os.Exit(1)
+	}
+	// fmt.Println("Response Status: ", resp.Status)
+	// body, err := io.ReadAll(resp.Body)
+	// fmt.Println("Response Body: ", string(body))
+	return resp
 }
 
 func GetRepoMetadata(args *Args, repoData *RepoData, usersList *UsersList) {
@@ -237,13 +265,7 @@ func GetRepoMetadata(args *Args, repoData *RepoData, usersList *UsersList) {
 
 	generateApiUrl(args, repoData)
 
-	resp, err := http.Get(repoData.URL)
-	if err != nil {
-		fmt.Println("Error occured while sending request to URL: ", repoData.URL)
-		fmt.Println("Error: ", err)
-		os.Exit(1)
-	}
-	defer resp.Body.Close()
+	resp := sendRequest(repoData.URL, args)
 	if resp.StatusCode == 404 {
 		fmt.Println("Repository not found")
 		fmt.Println("Please recheck the repository link and try again")
@@ -267,42 +289,48 @@ func GetRepoMetadata(args *Args, repoData *RepoData, usersList *UsersList) {
 		AddUser(owner, usersList)
 	} else {
 		fmt.Println("Unable to GET URL: ", repoData.URL)
-		fmt.Println("Error: ", resp.StatusCode)
+		responseHeaderPrinter(resp)
 		os.Exit(1)
 	}
 }
 
-func GetCommits(repoData *RepoData, commitsList *CommitsList) {
-	commitsUrl := strings.Replace(repoData.CommitsURL, "{/sha}", "", -1)
-	resp, err := http.Get(commitsUrl)
-	if err != nil {
-		fmt.Println("Error occured while sending request to URL: ", commitsUrl)
-		fmt.Println("Error: ", err)
-		os.Exit(1)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode == 200 {
-		fmt.Println("Commits found")
+func GetCommits(repoData *RepoData, commitsList *CommitsList, args *Args) {
+	baseCommitsUrl := strings.Replace(repoData.CommitsURL, "{/sha}", "", -1) + "?per_page=100&page="
 
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			fmt.Println("Error occured while reading response body")
-			fmt.Println("Read Error: ", err)
+	page := 1
+	for {
+		commitsUrl := baseCommitsUrl + fmt.Sprint(page)
+		commitsInPage := &CommitsList{}
+		resp := sendRequest(commitsUrl, args)
+		if resp.StatusCode == 200 {
+			// fmt.Println("Commits found")
+
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				fmt.Println("Error occured while reading response body")
+				fmt.Println("Read Error: ", err)
+				os.Exit(1)
+			}
+			if err := json.Unmarshal(body, &commitsInPage); err != nil {
+				fmt.Println("JSON Unmarshal Error: ", err)
+				os.Exit(1)
+			}
+			*commitsList = append(*commitsList, *commitsInPage...)
+			// fmt.Println("Total Commits: ", len(*commitsList))
+			if len(*commitsInPage) < 100 {
+				break
+			}
+			// for i, commit := range *commitsList {
+			// 	fmt.Printf("%2d: %s\n", i+1, commit.Commit.URL)
+			// }
+		} else {
+			fmt.Println("Unable to GET URL: ", commitsUrl)
+			responseHeaderPrinter(resp)
 			os.Exit(1)
 		}
-		if err := json.Unmarshal(body, &commitsList); err != nil {
-			fmt.Println("JSON Unmarshal Error: ", err)
-			os.Exit(1)
-		}
-		fmt.Println("Total Commits: ", len(*commitsList))
-		// for i, commit := range *commitsList {
-		// 	fmt.Printf("%2d: %s\n", i+1, commit.Commit.URL)
-		// }
-	} else {
-		fmt.Println("Unable to GET URL: ", commitsUrl)
-		fmt.Println("Error: ", resp.StatusCode)
-		os.Exit(1)
+		page++
 	}
+	fmt.Println("Total Commits: ", len(*commitsList))
 }
 
 func PrintUsers(usersList *UsersList) {
@@ -362,7 +390,7 @@ func main() {
 
 	ParseArgs(args) // Pass the address of args to ParseArgs and dereference the returned value
 	GetRepoMetadata(args, repoData, usersList)
-	GetCommits(repoData, commitsList)
+	GetCommits(repoData, commitsList, args)
 	FindUsersFromCommits(commitsList, usersList)
 
 	// s, _ := json.MarshalIndent(repoData, "", "\t")
