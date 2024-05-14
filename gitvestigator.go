@@ -146,16 +146,54 @@ type Commits struct {
 		Verification struct {
 			Verified  bool   `json:"verified"`
 			Reason    string `json:"reason"`
-			Signature any    `json:"signature"`
-			Payload   any    `json:"payload"`
+			Signature string `json:"signature"`
+			Payload   string `json:"payload"`
 		} `json:"verification"`
 	} `json:"commit"`
 	URL         string `json:"url"`
 	HTMLURL     string `json:"html_url"`
 	CommentsURL string `json:"comments_url"`
-	Author      any    `json:"author"`
-	Committer   any    `json:"committer"`
-	Parents     []struct {
+	Author      struct {
+		Login             string `json:"login"`
+		ID                int    `json:"id"`
+		NodeID            string `json:"node_id"`
+		AvatarURL         string `json:"avatar_url"`
+		GravatarID        string `json:"gravatar_id"`
+		URL               string `json:"url"`
+		HTMLURL           string `json:"html_url"`
+		FollowersURL      string `json:"followers_url"`
+		FollowingURL      string `json:"following_url"`
+		GistsURL          string `json:"gists_url"`
+		StarredURL        string `json:"starred_url"`
+		SubscriptionsURL  string `json:"subscriptions_url"`
+		OrganizationsURL  string `json:"organizations_url"`
+		ReposURL          string `json:"repos_url"`
+		EventsURL         string `json:"events_url"`
+		ReceivedEventsURL string `json:"received_events_url"`
+		Type              string `json:"type"`
+		SiteAdmin         bool   `json:"site_admin"`
+	} `json:"author"`
+	Committer struct {
+		Login             string `json:"login"`
+		ID                int    `json:"id"`
+		NodeID            string `json:"node_id"`
+		AvatarURL         string `json:"avatar_url"`
+		GravatarID        string `json:"gravatar_id"`
+		URL               string `json:"url"`
+		HTMLURL           string `json:"html_url"`
+		FollowersURL      string `json:"followers_url"`
+		FollowingURL      string `json:"following_url"`
+		GistsURL          string `json:"gists_url"`
+		StarredURL        string `json:"starred_url"`
+		SubscriptionsURL  string `json:"subscriptions_url"`
+		OrganizationsURL  string `json:"organizations_url"`
+		ReposURL          string `json:"repos_url"`
+		EventsURL         string `json:"events_url"`
+		ReceivedEventsURL string `json:"received_events_url"`
+		Type              string `json:"type"`
+		SiteAdmin         bool   `json:"site_admin"`
+	} `json:"committer"`
+	Parents []struct {
 		Sha     string `json:"sha"`
 		URL     string `json:"url"`
 		HTMLURL string `json:"html_url"`
@@ -165,7 +203,8 @@ type Commits struct {
 type CommitsList []Commits
 
 type UserIdentifiers struct {
-	username     string
+	name         string
+	login        string
 	emailAddress string
 	appearances  []string
 }
@@ -185,12 +224,12 @@ func Usage() {
 }
 
 func AddUser(user *UserIdentifiers, usersList *UsersList) {
-	if user.username == "GitHub" && user.emailAddress == "noreply@github.com" {
+	if (user.name == "GitHub" || user.login == "GitHub") && user.emailAddress == "noreply@github.com" {
 		return
 	}
 	userPresent := false
 	for i, userInList := range *usersList {
-		if userInList.username == user.username && userInList.emailAddress == user.emailAddress {
+		if userInList.name == user.name && userInList.emailAddress == user.emailAddress {
 			userPresent = true
 
 			appearancePresent := false
@@ -211,10 +250,10 @@ func AddUser(user *UserIdentifiers, usersList *UsersList) {
 	if !userPresent {
 		*usersList = append(*usersList, *user)
 		sort.Slice(*usersList, func(i, j int) bool {
-			if (*usersList)[i].username == (*usersList)[j].username {
+			if (*usersList)[i].name == (*usersList)[j].name {
 				return (*usersList)[i].emailAddress < (*usersList)[j].emailAddress
 			}
-			return (*usersList)[i].username < (*usersList)[j].username
+			return (*usersList)[i].name < (*usersList)[j].name
 		})
 	}
 }
@@ -284,7 +323,7 @@ func GetRepoMetadata(args *Args, repoData *RepoData, usersList *UsersList) {
 			fmt.Println("JSON Unmarshal Error: ", err)
 			os.Exit(1)
 		}
-		owner := &UserIdentifiers{repoData.Owner.Login, "", []string{"owner"}}
+		owner := &UserIdentifiers{"", repoData.Owner.Login, "", []string{"owner"}}
 		// owner := UserIdentifiers{repoData.Owner.Login, "", []string{"owner"}}
 		AddUser(owner, usersList)
 	} else {
@@ -340,10 +379,10 @@ func PrintUsers(usersList *UsersList) {
 		return
 	}
 	writer := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-	fmt.Fprintln(writer, "No.\tUsername\tEmail Address\tAppearences")
+	fmt.Fprintln(writer, "No.\tName\tUsername\tEmail Address\tAppearences")
 	fmt.Fprintln(writer, "---\t--------\t-------------\t-----------")
 	for i, user := range *usersList {
-		fmt.Fprintf(writer, "%d\t%s\t%s\t%s\n", i+1, user.username, user.emailAddress, strings.Join(user.appearances, ", "))
+		fmt.Fprintf(writer, "%d\t%s\t%s\t%s\t%s\n", i+1, user.name, user.login, user.emailAddress, strings.Join(user.appearances, ", "))
 	}
 	writer.Flush()
 }
@@ -352,7 +391,7 @@ func FindUsersFromCommits(commitsList *CommitsList, usersList *UsersList) {
 
 	for _, commit := range *commitsList {
 		// present := false
-		author := &UserIdentifiers{commit.Commit.Author.Name, commit.Commit.Author.Email, []string{"commit/author"}}
+		author := &UserIdentifiers{commit.Commit.Author.Name, commit.Author.Login, commit.Commit.Author.Email, []string{"commit/author"}}
 		// author := UserIdentifiers{commit.Commit.Author.Name, commit.Commit.Author.Email, []string{"commit/author"}}
 		// for _, userInList := range *usersList {
 		// 	if userInList.username == author.username && userInList.emailAddress == author.emailAddress {
@@ -365,7 +404,7 @@ func FindUsersFromCommits(commitsList *CommitsList, usersList *UsersList) {
 		// }
 		AddUser(author, usersList)
 
-		committer := &UserIdentifiers{commit.Commit.Committer.Name, commit.Commit.Committer.Email, []string{"commit/committer"}}
+		committer := &UserIdentifiers{commit.Commit.Committer.Name, commit.Committer.Login, commit.Commit.Committer.Email, []string{"commit/committer"}}
 		// committer := UserIdentifiers{commit.Commit.Committer.Name, commit.Commit.Committer.Email, []string{"commit/committer"}}
 		// for _, userInList := range *usersList {
 		// 	if userInList.username == committer.username && userInList.emailAddress == committer.emailAddress {
