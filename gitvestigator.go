@@ -229,11 +229,10 @@ func AddUser(user *UserIdentifiers, usersList *UsersList) {
 	}
 	userPresent := false
 	for i, userInList := range *usersList {
-		if userInList.name == user.name && userInList.emailAddress == user.emailAddress {
+		if userInList.name == user.name && userInList.emailAddress == user.emailAddress && userInList.login == user.login {
 			userPresent = true
 
 			appearancePresent := false
-
 			for _, appearance := range userInList.appearances {
 				if appearance == user.appearances[0] {
 					appearancePresent = true
@@ -250,10 +249,10 @@ func AddUser(user *UserIdentifiers, usersList *UsersList) {
 	if !userPresent {
 		*usersList = append(*usersList, *user)
 		sort.Slice(*usersList, func(i, j int) bool {
-			if (*usersList)[i].name == (*usersList)[j].name {
+			if (*usersList)[i].login == (*usersList)[j].login {
 				return (*usersList)[i].emailAddress < (*usersList)[j].emailAddress
 			}
-			return (*usersList)[i].name < (*usersList)[j].name
+			return (*usersList)[i].login < (*usersList)[j].login
 		})
 	}
 }
@@ -380,11 +379,22 @@ func PrintUsers(usersList *UsersList) {
 	}
 	writer := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	fmt.Fprintln(writer, "No.\tName\tUsername\tEmail Address\tAppearences")
-	fmt.Fprintln(writer, "---\t--------\t-------------\t-----------")
+	fmt.Fprintln(writer, "---\t--------\t-------------\t-----------\t-----------")
 	for i, user := range *usersList {
 		fmt.Fprintf(writer, "%d\t%s\t%s\t%s\t%s\n", i+1, user.name, user.login, user.emailAddress, strings.Join(user.appearances, ", "))
+		// f, err := os.OpenFile("users.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		// if err != nil {
+		// 	fmt.Println("Error occured while opening file")
+		// 	fmt.Println("Error: ", err)
+		// }
+		// defer f.Close()
+		// if _, err := f.WriteString(fmt.Sprintf("%d,%s,%s,%s,%s\n", i+1, user.name, user.login, user.emailAddress, strings.Join(user.appearances, ", "))); err != nil {
+		// 	fmt.Println("Error occured while writing to file")
+		// 	fmt.Println("Error: ", err)
+		// }
 	}
 	writer.Flush()
+
 }
 
 func FindUsersFromCommits(commitsList *CommitsList, usersList *UsersList) {
