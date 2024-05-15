@@ -2,15 +2,19 @@ package main
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"sort"
 	"strings"
 	"text/tabwriter"
 	"time"
+
+	"github.com/lmittmann/tint"
+	"github.com/mattn/go-isatty"
+	"github.com/urfave/cli/v2"
 )
 
 type Args struct {
@@ -211,17 +215,48 @@ type UserIdentifiers struct {
 
 type UsersList []UserIdentifiers
 
+var (
+	args        = &Args{}
+	repoData    = &RepoData{}
+	commitsList = &CommitsList{}
+	usersList   = &UsersList{}
+)
+
+var w = os.Stderr
+var logger = slog.New(
+	tint.NewHandler(w, &tint.Options{
+		Level:   slog.LevelDebug,
+		NoColor: !isatty.IsTerminal(w.Fd()),
+	}),
+)
+
 func responseHeaderPrinter(resp *http.Response) {
-	fmt.Println("Response Header:")
+	logger.Debug("Response Header:")
 	for key, value := range resp.Header {
-		fmt.Printf("%s: %s\n", key, strings.Join(value, ", "))
+		logger.Debug("", key, strings.Join(value, ", "))
+		// fmt.Printf("%s: %s\n", key, strings.Join(value, ", "))
 	}
 }
 
-func Usage() {
-	fmt.Println("Usage: gitvestigator -repo https://github.com/username/repo.git -t <GitHub_Personal_Token>")
-	os.Exit(1)
-}
+// func Usage() {
+// 	fmt.Println("Usage: gitvestigator -repo https://github.com/username/repo.git -t <GitHub_Personal_Token>")
+// 	os.Exit(1)
+// }
+
+// func ParseArgs(args *Args) *Args {
+// 	flag.StringVar(&args.repoLink, "repo", "", "The link to the repository")
+// 	flag.StringVar(&args.token, "t", "", "GitHub Personal Access Token")
+// 	flag.Parse()
+// 	if len(os.Args) < 2 {
+// 		flag.Usage = Usage
+// 		flag.Usage()
+// 	}
+// 	if args.token == "" {
+// 		fmt.Println("NO TOKEN WAS PROVIDED")
+// 		fmt.Println("Number of requests will be limited to 60 per hour")
+// 	}
+// 	return args
+// }
 
 func AddUser(user *UserIdentifiers, usersList *UsersList) {
 	if (user.name == "GitHub" || user.login == "GitHub") && user.emailAddress == "noreply@github.com" {
@@ -255,21 +290,6 @@ func AddUser(user *UserIdentifiers, usersList *UsersList) {
 			return (*usersList)[i].login < (*usersList)[j].login
 		})
 	}
-}
-
-func ParseArgs(args *Args) *Args {
-	flag.StringVar(&args.repoLink, "repo", "", "The link to the repository")
-	flag.StringVar(&args.token, "t", "", "GitHub Personal Access Token")
-	flag.Parse()
-	if len(os.Args) < 2 {
-		flag.Usage = Usage
-		flag.Usage()
-	}
-	if args.token == "" {
-		fmt.Println("NO TOKEN WAS PROVIDED")
-		fmt.Println("Number of requests will be limited to 60 per hour")
-	}
-	return args
 }
 
 func generateApiUrl(args *Args, repoData *RepoData) {
@@ -326,7 +346,7 @@ func GetRepoMetadata(args *Args, repoData *RepoData, usersList *UsersList) {
 		// owner := UserIdentifiers{repoData.Owner.Login, "", []string{"owner"}}
 		AddUser(owner, usersList)
 	} else {
-		fmt.Println("Unable to GET URL: ", repoData.URL)
+		logger.Error("Unable to GET URL: " + repoData.URL)
 		responseHeaderPrinter(resp)
 		os.Exit(1)
 	}
@@ -431,13 +451,31 @@ func FindUsersFromCommits(commitsList *CommitsList, usersList *UsersList) {
 }
 
 func main() {
+	app := &cli.App{}
+	app.Name = "gitvestigator"
+	app.Usage = "Perform OSINT investigation on GitHub repositories"
+	app.Version = "1.0.0"
+	app.Authors = []*cli.Author{
+		{Name: "0xNirvana"},
+	}
+	app.Flags = []cli.Flag{
+		&cli.StringFlag{Destination: &args.token, Name: "token", Aliases: []string{"t"}, Usage: "Your GitHub Personal Access Token"},
+		&cli.StringFlag{Destination: &args.repoLink, Name: "repo", Aliases: []string{"r"}, Usage: "Link of the repository to investigate"},
+	}
+	app.Action = AppProc
+	err := app.Run(os.Args)
+	if err != nil {
+		logger.Error("Error occured while running the app")
+	}
+}
+func AppProc(ctx *cli.Context) error {
 
-	args := &Args{}               // Initialize the args variable
-	repoData := &RepoData{}       // Initialize the RepoData variable
-	commitsList := &CommitsList{} // Initialize the Commits variable
-	usersList := &UsersList{}     // Initialize the users variable
+	// args := ctx.Args()            // Initialize the args variable
+	// repoData := &RepoData{}       // Initialize the RepoData variable
+	// commitsList := &CommitsList{} // Initialize the Commits variable
+	// usersList := &UsersList{}     // Initialize the users variable
 
-	ParseArgs(args) // Pass the address of args to ParseArgs and dereference the returned value
+	// ParseArgs(args) // Pass the address of args to ParseArgs and dereference the returned value
 	GetRepoMetadata(args, repoData, usersList)
 	GetCommits(repoData, commitsList, args)
 	FindUsersFromCommits(commitsList, usersList)
@@ -449,5 +487,6 @@ func main() {
 	// fmt.Println(string(c))
 	PrintUsers(usersList)
 	fmt.Println("Bye Bye <3")
+	return nil
 
 }
