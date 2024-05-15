@@ -258,7 +258,7 @@ func responseHeaderPrinter(resp *http.Response) {
 // 	return args
 // }
 
-func AddUser(user *UserIdentifiers, usersList *UsersList) {
+func AddUser(user *UserIdentifiers) {
 	if (user.name == "GitHub" || user.login == "GitHub") && user.emailAddress == "noreply@github.com" {
 		return
 	}
@@ -292,11 +292,11 @@ func AddUser(user *UserIdentifiers, usersList *UsersList) {
 	}
 }
 
-func generateApiUrl(args *Args, repoData *RepoData) {
+func generateApiUrl() {
 	repoData.URL = strings.Replace(args.repoLink, "https://github.com", "https://api.github.com/repos", -1)
 }
 
-func sendRequest(url string, args *Args) *http.Response {
+func sendRequest(url string) *http.Response {
 	// fmt.Println("Sending request to URL: ", url)
 	client := &http.Client{}
 	req, _ := http.NewRequest("GET", url, nil)
@@ -313,7 +313,7 @@ func sendRequest(url string, args *Args) *http.Response {
 	return resp
 }
 
-func GetRepoMetadata(args *Args, repoData *RepoData, usersList *UsersList) {
+func GetRepoMetadata() {
 	if !strings.Contains(args.repoLink, "https://github.com") {
 		fmt.Println("Kindly provide the link to the repository in the format: https://github.com/username/repo")
 		os.Exit(1)
@@ -321,9 +321,9 @@ func GetRepoMetadata(args *Args, repoData *RepoData, usersList *UsersList) {
 
 	args.repoLink = strings.Replace(args.repoLink, ".git", "", -1)
 
-	generateApiUrl(args, repoData)
+	generateApiUrl()
 
-	resp := sendRequest(repoData.URL, args)
+	resp := sendRequest(repoData.URL)
 	if resp.StatusCode == 404 {
 		fmt.Println("Repository not found")
 		fmt.Println("Please recheck the repository link and try again")
@@ -344,7 +344,7 @@ func GetRepoMetadata(args *Args, repoData *RepoData, usersList *UsersList) {
 		}
 		owner := &UserIdentifiers{"", repoData.Owner.Login, "", []string{"owner"}}
 		// owner := UserIdentifiers{repoData.Owner.Login, "", []string{"owner"}}
-		AddUser(owner, usersList)
+		AddUser(owner)
 	} else {
 		logger.Error("Unable to GET URL: " + repoData.URL)
 		responseHeaderPrinter(resp)
@@ -352,14 +352,14 @@ func GetRepoMetadata(args *Args, repoData *RepoData, usersList *UsersList) {
 	}
 }
 
-func GetCommits(repoData *RepoData, commitsList *CommitsList, args *Args) {
+func GetCommits() {
 	baseCommitsUrl := strings.Replace(repoData.CommitsURL, "{/sha}", "", -1) + "?per_page=100&page="
 
 	page := 1
 	for {
 		commitsUrl := baseCommitsUrl + fmt.Sprint(page)
 		commitsInPage := &CommitsList{}
-		resp := sendRequest(commitsUrl, args)
+		resp := sendRequest(commitsUrl)
 		if resp.StatusCode == 200 {
 			// fmt.Println("Commits found")
 
@@ -391,7 +391,7 @@ func GetCommits(repoData *RepoData, commitsList *CommitsList, args *Args) {
 	fmt.Println("Total Commits: ", len(*commitsList))
 }
 
-func PrintUsers(usersList *UsersList) {
+func PrintUsers() {
 	fmt.Println("Users found: ", len(*usersList))
 	if len(*usersList) == 0 {
 		fmt.Println("No users found")
@@ -417,7 +417,7 @@ func PrintUsers(usersList *UsersList) {
 
 }
 
-func FindUsersFromCommits(commitsList *CommitsList, usersList *UsersList) {
+func FindUsersFromCommits() {
 
 	for _, commit := range *commitsList {
 		// present := false
@@ -432,7 +432,7 @@ func FindUsersFromCommits(commitsList *CommitsList, usersList *UsersList) {
 		// if !present {
 		// 	AddUser(author, usersList)
 		// }
-		AddUser(author, usersList)
+		AddUser(author)
 
 		committer := &UserIdentifiers{commit.Commit.Committer.Name, commit.Committer.Login, commit.Commit.Committer.Email, []string{"commit/committer"}}
 		// committer := UserIdentifiers{commit.Commit.Committer.Name, commit.Commit.Committer.Email, []string{"commit/committer"}}
@@ -445,7 +445,7 @@ func FindUsersFromCommits(commitsList *CommitsList, usersList *UsersList) {
 		// if !present {
 		// 	AddUser(committer, usersList)
 		// }
-		AddUser(committer, usersList)
+		AddUser(committer)
 	}
 
 }
@@ -476,16 +476,16 @@ func AppProc(ctx *cli.Context) error {
 	// usersList := &UsersList{}     // Initialize the users variable
 
 	// ParseArgs(args) // Pass the address of args to ParseArgs and dereference the returned value
-	GetRepoMetadata(args, repoData, usersList)
-	GetCommits(repoData, commitsList, args)
-	FindUsersFromCommits(commitsList, usersList)
+	GetRepoMetadata()
+	GetCommits()
+	FindUsersFromCommits()
 
 	// s, _ := json.MarshalIndent(repoData, "", "\t")
 	// fmt.Println(string(s))
 
 	// c, _ := json.MarshalIndent(commitsList, "", "\t")
 	// fmt.Println(string(c))
-	PrintUsers(usersList)
+	PrintUsers()
 	fmt.Println("Bye Bye <3")
 	return nil
 
