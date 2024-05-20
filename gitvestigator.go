@@ -392,7 +392,7 @@ func GetCommits() {
 }
 
 func PrintUsers() {
-	fmt.Println("Users found: ", len(*usersList))
+	fmt.Println("Unique Combinations Found: ", len(*usersList))
 	if len(*usersList) == 0 {
 		fmt.Println("No users found")
 		return
@@ -475,7 +475,12 @@ func AppProc(ctx *cli.Context) error {
 	// commitsList := &CommitsList{} // Initialize the Commits variable
 	// usersList := &UsersList{}     // Initialize the users variable
 
+	if ctx.NArg() == 0 {
+		ctx.App.Command("help").Run(ctx)
+		return nil
+	}
 	// ParseArgs(args) // Pass the address of args to ParseArgs and dereference the returned value
+
 	GetRepoMetadata()
 	GetCommits()
 	FindUsersFromCommits()
